@@ -6,10 +6,12 @@
  */
 $(function() {
     function GpiorgbcontrollerViewModel(parameters) {
+
         var self = this;
         self.settings = parameters[0]
         self.color = ko.observable()
         self.isOn = ko.observable(false)
+        self.white = ko.observable()
 
         self.updateColor = function(picker, event) {
             var newColor = event.currentTarget.jscolor.toHEXString()
@@ -25,6 +27,24 @@ $(function() {
                 self.color(newColor)
                 OctoPrint.simpleApiCommand('gpiorgbcontroller', 'update_color', {'color': newColor})
                 OctoPrint.settings.savePluginSettings('gpiorgbcontroller', {'color': newColor})
+            }
+        }
+		
+        self.updateWhite = function(picker, event) {
+            var newWhite = event.currentTarget.value.value
+            if(newWhite) {
+                self.white(newWhite)
+                OctoPrint.simpleApiCommand('gpiorgbcontroller', 'update_white', {'white': newWhite})
+				OctoPrint.settings.savePluginSettings('gpiorgbcontroller', {'white': newWhite})
+            }
+        }
+
+        self.saveWhite = function(picker, event) {
+            var newWhite = event.currentTarget.value
+            if(newWhite) {
+                self.white(newWhite)
+                OctoPrint.simpleApiCommand('gpiorgbcontroller', 'update_white', {'white': newWhite})
+                OctoPrint.settings.savePluginSettings('gpiorgbcontroller', {'white': newWhite})
             }
         }
 

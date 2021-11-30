@@ -2,18 +2,21 @@
 from __future__ import absolute_import
 import octoprint.plugin
 from gpiozero.pins.rpigpio import RPiGPIOFactory
-from gpiozero import RGBLED, Button
+from gpiozero import RGBLED, PWMLED, Button
 
 
 class GpiorgbcontrollerPlugin(octoprint.plugin.StartupPlugin,
 							  octoprint.plugin.SettingsPlugin,
-                              octoprint.plugin.AssetPlugin,
-                              octoprint.plugin.TemplatePlugin,
+							  octoprint.plugin.AssetPlugin,
+							  octoprint.plugin.TemplatePlugin,
 							  octoprint.plugin.SimpleApiPlugin):
+
 
 	def __init__(self):
 		self.led = None
+		self.wled = None
 		self.color = '#FFFFFF'
+		self.white = 0
 		self.is_on = False
 		self.btn = None
 		self.is_btn_en = False
@@ -21,7 +24,7 @@ class GpiorgbcontrollerPlugin(octoprint.plugin.StartupPlugin,
 		self.gcode_index_enable = False
 		self.gcode_rgb_index = 1
 		self.pin_factory = RPiGPIOFactory()
-	
+
 
 	def init_rgb(self, red_pin, grn_pin, blu_pin):
 		try:
@@ -40,6 +43,25 @@ class GpiorgbcontrollerPlugin(octoprint.plugin.StartupPlugin,
 				self._logger.info("LEDs deinitialized")
 		except:
 			self._logger.error("Error occurred while deinitializing LEDs")
+
+
+	def init_wht(self, wht_pin):
+		try:
+			self.deinit_wht()
+			self.wled = PWMLED(pin=wht_pin, active_high=True, pin_factory=self.pin_factory)
+			self._logger.info("wLEDs initialized with pin factory: " + str(self.wled.pin_factory))
+		except:
+			self._logger.error("Error occurred while initializing wLEDs")
+
+
+	def deinit_wht(self):
+		try:
+			if(self.wled is not None):
+				self.wled.close()
+				self.wled = None
+				self._logger.info("wLEDs deinitialized")
+		except:
+			self._logger.error("Error occurred while deinitializing wLEDs")
 
 
 	def init_btn(self, pin):
@@ -75,13 +97,16 @@ class GpiorgbcontrollerPlugin(octoprint.plugin.StartupPlugin,
 		if(self.is_btn_en):
 			self.is_on = True
 			self.update_rgb(self.color, self.is_on)
+			self.update_wht(self.white, self.is_on)
+
 
 
 	def on_btn_release(self):
 		if(self.is_btn_en):
 			self.is_on = False
 			self.update_rgb(self.color, self.is_on)
-			
+			self.update_wht(self.white, self.is_on)
+
 
 	def update_rgb(self, color, is_on):
 		if(self.led is not None):
@@ -97,11 +122,23 @@ class GpiorgbcontrollerPlugin(octoprint.plugin.StartupPlugin,
 			self._logger.error("Error occurred while updating RGB state")
 
 
+	def update_wht(self, white, is_on):
+		if(self.wled is not None):
+			if is_on:
+				self.wled.value = int(white)/100
+			else:
+				self.wled.value = 0
+		else:
+			self._logger.error("Error occurred while updating White state")
+
+
 	def on_after_startup(self):
 		red_pin = self._settings.get_int(["red_pin"])
 		grn_pin = self._settings.get_int(["grn_pin"])
 		blu_pin = self._settings.get_int(["blu_pin"])
+		wht_pin = self._settings.get_int(["wht_pin"])
 		color = self._settings.get(["color"])
+		white = self._settings.get(["white"])
 		is_on = self._settings.get_boolean(["is_on"])
 		if red_pin is not None and grn_pin is not None and blu_pin is not None:
 			self.init_rgb(red_pin, grn_pin, blu_pin)
@@ -109,6 +146,12 @@ class GpiorgbcontrollerPlugin(octoprint.plugin.StartupPlugin,
 				self.color = color
 				self.is_on = is_on
 				self.update_rgb(self.color, self.is_on)
+		if wht_pin is not None:
+			self.init_wht(wht_pin)
+			if(is_on is not None and white is not None):
+				self.white = white
+				self.is_on = is_on
+				self.update_wht(self.white, self.is_on)
 		btn_pin = self._settings.get_int(["btn_pin"])
 		is_btn_en = self._settings.get_boolean(["is_btn_en"])
 		if btn_pin is not None and is_btn_en is not None:
@@ -124,8 +167,8 @@ class GpiorgbcontrollerPlugin(octoprint.plugin.StartupPlugin,
 		gcode_rgb_index = self._settings.get_int(["gcode_rgb_index"])
 		if gcode_rgb_index is not None:
 			self.gcode_rgb_index = gcode_rgb_index
-		self._plugin_manager.send_plugin_message(self._identifier, dict(is_on=self.is_on, color=self.color))
-		
+		self._plugin_manager.send_plugin_message(self._identifier, dict(is_on=self.is_on, color=self.color, white=self.white))
+
 
 	def on_settings_save(self, data):
 		octoprint.plugin.SettingsPlugin.on_settings_save(self, data)
@@ -135,12 +178,21 @@ class GpiorgbcontrollerPlugin(octoprint.plugin.StartupPlugin,
 			blu_pin = self._settings.get_int(["blu_pin"])
 			if(red_pin is not None and grn_pin is not None and blu_pin is not None):
 				self.init_rgb(red_pin, grn_pin, blu_pin)
+		if 'wht_pin' in data:
+			wht_pin = self._settings.get_int(["wht_pin"])
+			if(wht_pin is not None):
+				self.init_wht(wht_pin)
 		color = self._settings.get(["color"])
+		white = self._settings.get(["white"])
 		is_on = self._settings.get_boolean(["is_on"])
 		if is_on is not None and color is not None:
 			self.color = color
 			self.is_on = is_on
 			self.update_rgb(self.color, self.is_on)
+		if is_on is not None and white is not None:
+			self.white = white
+			self.is_on = is_on
+			self.update_wht(self.white, self.is_on)
 		if 'btn_pin' in data or 'is_btn_en' in data:
 			btn_pin = self._settings.get_int(["btn_pin"])
 			is_btn_en = self._settings.get_boolean(["is_btn_en"])
@@ -157,13 +209,16 @@ class GpiorgbcontrollerPlugin(octoprint.plugin.StartupPlugin,
 		gcode_rgb_index = self._settings.get_int(["gcode_rgb_index"])
 		if gcode_rgb_index is not None:
 			self.gcode_rgb_index = gcode_rgb_index
-		
+
+
 	def get_settings_defaults(self):
 		return dict(
 			red_pin=20,
 			grn_pin=25,
 			blu_pin=5,
+			wht_pin=0,
 			color='#FFFFFF',
+			white=10,
 			is_on = False,
 			btn_pin=21,
 			is_btn_en=False,
@@ -193,7 +248,8 @@ class GpiorgbcontrollerPlugin(octoprint.plugin.StartupPlugin,
 		return dict(
 			update_color=["color"],
 			turn_on=[],
-			turn_off=[]
+			turn_off=[],
+			update_white=["white"]
 		)
 
 
@@ -202,12 +258,17 @@ class GpiorgbcontrollerPlugin(octoprint.plugin.StartupPlugin,
 			color = data.get('color', None)
 			if color != None:
 				self.color = color
+		elif command == "update_white":
+			white = data.get('white', None)
+			if white != None:
+				self.white = white
 		elif command == "turn_on":
 			self.is_on = True
 		elif command == "turn_off":
 			self.is_on = False
 		self.update_rgb(self.color, self.is_on)
-		
+		self.update_wht(self.white, self.is_on)
+
 
 	def gcode_parse_index(self, cmd):
 		params = cmd.split("I")
@@ -291,14 +352,16 @@ class GpiorgbcontrollerPlugin(octoprint.plugin.StartupPlugin,
 					self.color = color
 					self.is_on = True
 					self.update_rgb(self.color, self.is_on)
-					self._plugin_manager.send_plugin_message(self._identifier, dict(is_on=self.is_on, color=self.color))
+					self.update_wht(self.white, self.is_on)
+					self._plugin_manager.send_plugin_message(self._identifier, dict(is_on=self.is_on, color=self.color, white=self.white))
 			else:
 				if color is not None and len(color) == 7:
 					self.color = color
 					self.is_on = True
 					self.update_rgb(self.color, self.is_on)
-					self._plugin_manager.send_plugin_message(self._identifier, dict(is_on=self.is_on, color=self.color))
-		
+					self.update_wht(self.white, self.is_on)
+					self._plugin_manager.send_plugin_message(self._identifier, dict(is_on=self.is_on, color=self.color, white=self.white))
+
 
 	def get_update_information(self):
 		# Define the configuration for your plugin to use with the Software Update
